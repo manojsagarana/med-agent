@@ -1,0 +1,521 @@
+{% extends "base.html" %}
+{% block title %}{{ machine.machine_id }} - Details{% endblock %}
+{% block page_title %}Machine Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item active">{{ machine.machine_id }}</li>
+        </ol>
+    </nav>
+    
+    <!-- Maintenance Alert Banner -->
+    {% if scheduled_maintenance %}
+    <div class="alert alert-warning mb-4">
+        <div class="d-flex align-items-center">
+            <i class="bi bi-tools fs-3 me-3"></i>
+            <div>
+                <h5 class="mb-1">🔧 Maintenance Scheduled</h5>
+                <p class="mb-0">
+                    <strong>Date:</strong> {{ scheduled_maintenance.scheduled_date.strftime('%A, %B %d, %Y at %I:%M %p') }}<br>
+                    <strong>Type:</strong> {{ scheduled_maintenance.maintenance_type|upper }}<br>
+                    <strong>Status:</strong> {{ scheduled_maintenance.status|upper }}<br>
+                    {% if scheduled_maintenance.vendor %}
+                    <strong>Vendor:</strong> {{ scheduled_maintenance.vendor.name }}<br>
+                    <strong>Vendor Email:</strong> {{ scheduled_maintenance.vendor.contact_email }}<br>
+                    {% if scheduled_maintenance.vendor.contact_phone %}
+                    <strong>Vendor Phone:</strong> {{ scheduled_maintenance.vendor.contact_phone }}<br>
+                    {% endif %}
+                    {% endif %}
+                    <strong>Estimated Cost:</strong> ${{ scheduled_maintenance.estimated_cost|default(0)|round(2) }}<br>
+                    {% if scheduled_maintenance.patients_rescheduled %}
+                    <strong>Patients Rescheduled:</strong> {{ scheduled_maintenance.patients_rescheduled }}
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Machine Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h3 class="mb-1">{{ machine.machine_id }}</h3>
+                            <p class="text-muted mb-2">{{ machine.model }} | {{ machine.manufacturer }}</p>
+                            <p class="mb-0"><i class="bi bi-geo-alt"></i> {{ machine.location }}</p>
+                        </div>
+                        <div class="text-end">
+                            <span class="badge fs-5 mb-2" id="status-badge">Loading...</span>
+                            <div id="mode-badges" class="mt-2"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column justify-content-center">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg" onclick="runMachineDiagnostics()">
+                            <i class="bi bi-activity"></i> Run Diagnostics
+                        </button>
+                        <button class="btn btn-outline-secondary" onclick="exportMachineReport()">
+                            <i class="bi bi-download"></i> Export Report
+                        </button>
+                        {% if user.role in ['admin', 'engineer'] %}
+                        <button class="btn btn-success" onclick="markMaintenanceComplete()" id="btn-complete-maintenance"
+                                {% if not machine.maintenance_scheduled %}disabled{% endif %}>
+                            <i class="bi bi-check-circle"></i> Mark Maintenance Complete
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Scheduled Maintenance Card -->
+    {% if machine.maintenance_scheduled and machine.scheduled_maintenance_date %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Scheduled Maintenance Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <h6>Scheduled Date</h6>
+                            <p class="fs-5">{{ machine.scheduled_maintenance_date.strftime('%Y-%m-%d %H:%M') }}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h6>Days Until Maintenance</h6>
+                            {% set days_until = (machine.scheduled_maintenance_date - now).days if machine.scheduled_maintenance_date else 0 %}
+                            <p class="fs-5">{{ days_until }} days</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h6>Machine Status</h6>
+                            <p class="fs-5">{{ machine.operation_mode|upper }}</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h6>Last Maintenance</h6>
+                            <p class="fs-5">{{ machine.last_maintenance.strftime('%Y-%m-%d') if machine.last_maintenance else 'Never' }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Analysis Progress -->
+    <div id="analysis-progress" class="alert alert-info d-none mb-4">
+        <div class="d-flex align-items-center">
+            <div class="spinner-border spinner-border-sm me-2"></div>
+            <span>Running diagnostics...</span>
+        </div>
+    </div>
+    
+    <!-- Telemetry & Status -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Live Telemetry</h5></div>
+                <div class="card-body">
+                    <canvas id="machineChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header"><h5 class="mb-0">Current Readings</h5></div>
+                <div class="card-body" id="current-readings">
+                    <div class="text-center py-4"><div class="spinner-border"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Alerts -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Recent Alerts</h5></div>
+                <div class="card-body">
+                    {% if recent_alerts %}
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Severity</th>
+                                <th>Description</th>
+                                <th>Vendor Scheduled</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for alert in recent_alerts %}
+                            <tr>
+                                <td>{{ alert.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+                                <td>
+                                    <span class="badge {% if alert.severity == 'critical' %}bg-dark{% elif alert.severity == 'schedule_maintenance' %}bg-danger{% else %}bg-warning{% endif %}">
+                                        {{ alert.severity }}
+                                    </span>
+                                </td>
+                                <td>{{ alert.description[:60] }}...</td>
+                                <td>
+                                    {% if alert.vendor_scheduled_date %}
+                                        <span class="text-success">{{ alert.vendor_scheduled_date.strftime('%Y-%m-%d') }}</span>
+                                    {% else %}
+                                        <span class="text-muted">Not scheduled</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if alert.is_resolved %}
+                                        <span class="badge bg-success">Resolved</span>
+                                    {% else %}
+                                        <span class="badge bg-warning">Open</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted text-center">No recent alerts</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Cost Analysis -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Cost Impact Analysis</h5></div>
+                <div class="card-body" id="cost-analysis">
+                    <div class="text-center py-4"><div class="spinner-border"></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if user.role == 'admin' %}
+    <!-- Admin Controls -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-shield-exclamation"></i> Admin Controls</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <h6>Inject Fault (Testing)</h6>
+                            <select id="fault-type" class="form-select mb-2">
+                                <option value="helium_leak">Helium Leak (MRI)</option>
+                                <option value="gradient_overheat">Gradient Overheat</option>
+                                <option value="cooling_failure">Cooling Failure</option>
+                                <option value="vibration_anomaly">Vibration Anomaly</option>
+                                <option value="tube_overheat">Tube Overheat (CT)</option>
+                            </select>
+                            <button class="btn btn-danger" onclick="injectFault()">
+                                <i class="bi bi-lightning"></i> Inject Fault
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Contact Vendor Manually</h6>
+                            <button class="btn btn-warning" onclick="contactVendor()">
+                                <i class="bi bi-telephone"></i> Contact Vendor
+                            </button>
+                        </div>
+                        <div class="col-md-4">
+                            <h6>Force Reset</h6>
+                            <button class="btn btn-success" onclick="markMaintenanceComplete()">
+                                <i class="bi bi-arrow-counterclockwise"></i> Reset Machine
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const machineId = '{{ machine.machine_id }}';
+const machineType = '{{ machine.machine_type }}';
+let machineChart = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initMachineChart();
+    loadMachineData();
+    loadCostAnalysis();
+    setInterval(loadMachineData, 5000);
+});
+
+function initMachineChart() {
+    const ctx = document.getElementById('machineChart');
+    if (!ctx) return;
+    
+    let datasets = [
+        { label: 'Component Temp (°C)', data: [], borderColor: '#0d6efd', fill: false, tension: 0.4 },
+        { label: 'Gradient Coil (°C)', data: [], borderColor: '#dc3545', fill: false, tension: 0.4 },
+        { label: 'Vibration (mm/s)', data: [], borderColor: '#ffc107', fill: false, tension: 0.4 },
+        { label: 'Cooling (%)', data: [], borderColor: '#28a745', fill: false, tension: 0.4 }
+    ];
+    
+    if (machineType === 'MRI') {
+        datasets.push({ label: 'Helium (%)', data: [], borderColor: '#17a2b8', fill: false, tension: 0.4 });
+    } else {
+        datasets.push({ label: 'X-ray Tube (°C)', data: [], borderColor: '#6f42c1', fill: false, tension: 0.4 });
+    }
+    
+    machineChart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 0 }
+        }
+    });
+}
+
+async function loadMachineData() {
+    try {
+        const res = await fetch(`/api/machine/${machineId}/telemetry`);
+        const data = await res.json();
+        
+        if (data.current) {
+            updateCurrentReadings(data.current);
+            updateStatusBadge(data.current);
+        }
+        
+        if (data.history && machineChart) {
+            updateChart(data.history);
+        }
+    } catch (err) {
+        console.error('Error:', err);
+    }
+}
+
+function updateCurrentReadings(readings) {
+    const container = document.getElementById('current-readings');
+    
+    let html = '<ul class="list-group list-group-flush">';
+    
+    const params = [
+        { key: 'Component_Temp', label: 'Component Temp', unit: '°C', warn: 42, crit: 48 },
+        { key: 'Gradient_Coil_Temp', label: 'Gradient Coil', unit: '°C', warn: 52, crit: 60 },
+        { key: 'Vibration_Level', label: 'Vibration', unit: 'mm/s', warn: 2.2, crit: 3.0 },
+        { key: 'Cooling_System_Performance', label: 'Cooling', unit: '%', warn: 92, crit: 85, invert: true }
+    ];
+    
+    if (machineType === 'MRI') {
+        params.push({ key: 'Helium_Level', label: 'Helium', unit: '%', warn: 88, crit: 80, invert: true });
+        params.push({ key: 'Magnet_Temp_K', label: 'Magnet', unit: 'K', warn: 4.2, crit: 4.4 });
+    } else {
+        params.push({ key: 'X_ray_Tube_Temp', label: 'X-ray Tube', unit: '°C', warn: 65, crit: 78 });
+        params.push({ key: 'Cooling_Oil_Temp', label: 'Cooling Oil', unit: '°C', warn: 48, crit: 55 });
+    }
+    
+    params.forEach(p => {
+        const val = readings[p.key];
+        let status = 'success';
+        if (val !== undefined) {
+            if (p.invert) {
+                if (val < p.crit) status = 'danger';
+                else if (val < p.warn) status = 'warning';
+            } else {
+                if (val > p.crit) status = 'danger';
+                else if (val > p.warn) status = 'warning';
+            }
+        }
+        
+        html += `<li class="list-group-item d-flex justify-content-between">
+            <span>${p.label}</span>
+            <span class="badge bg-${status}">${val?.toFixed(2) || '--'} ${p.unit}</span>
+        </li>`;
+    });
+    
+    html += '</ul>';
+    container.innerHTML = html;
+}
+
+function updateStatusBadge(readings) {
+    const badge = document.getElementById('status-badge');
+    const severity = readings.Severity_Level || 0;
+    
+    let status, className;
+    if (severity >= 5) {
+        status = '⚫ Critical';
+        className = 'bg-dark';
+    } else if (severity >= 3) {
+        status = '🔴 Maintenance';
+        className = 'bg-danger';
+    } else {
+        status = '🟢 Normal';
+        className = 'bg-success';
+    }
+    
+    badge.textContent = status;
+    badge.className = `badge fs-5 ${className}`;
+}
+
+function updateChart(history) {
+    const labels = history.map((_, i) => i);
+    
+    machineChart.data.labels = labels;
+    machineChart.data.datasets[0].data = history.map(r => r.Component_Temp);
+    machineChart.data.datasets[1].data = history.map(r => r.Gradient_Coil_Temp);
+    machineChart.data.datasets[2].data = history.map(r => r.Vibration_Level);
+    machineChart.data.datasets[3].data = history.map(r => r.Cooling_System_Performance);
+    
+    if (machineType === 'MRI') {
+        machineChart.data.datasets[4].data = history.map(r => r.Helium_Level);
+    } else {
+        machineChart.data.datasets[4].data = history.map(r => r.X_ray_Tube_Temp);
+    }
+    
+    machineChart.update('none');
+}
+
+async function loadCostAnalysis() {
+    try {
+        const res = await fetch(`/api/cost-analysis/${machineId}`);
+        const data = await res.json();
+        
+        document.getElementById('cost-analysis').innerHTML = `
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h4 class="text-primary">$${data.prevention_cost?.toLocaleString() || 0}</h4>
+                            <p class="mb-0">Prevention Cost</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h4 class="text-danger">$${data.breakdown_cost?.toLocaleString() || 0}</h4>
+                            <p class="mb-0">Breakdown Cost</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h4>$${data.potential_savings?.toLocaleString() || 0}</h4>
+                            <p class="mb-0">Potential Savings</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (err) {
+        document.getElementById('cost-analysis').innerHTML = '<div class="alert alert-warning">Failed to load</div>';
+    }
+}
+
+async function runMachineDiagnostics() {
+    document.getElementById('analysis-progress').classList.remove('d-none');
+    
+    try {
+        const res = await fetch(`/api/machine/${machineId}/analyze`, { method: 'POST' });
+        const data = await res.json();
+        
+        setTimeout(() => {
+            document.getElementById('analysis-progress').classList.add('d-none');
+            loadMachineData();
+            loadCostAnalysis();
+            alert('Diagnostics complete!');
+        }, 2000);
+    } catch (err) {
+        document.getElementById('analysis-progress').classList.add('d-none');
+        alert('Failed to run diagnostics');
+    }
+}
+
+function exportMachineReport() {
+    window.location.href = `/api/reports/export/summary`;
+}
+
+async function markMaintenanceComplete() {
+    if (!confirm('Mark maintenance as complete? This will reset the machine to normal status.')) return;
+    
+    try {
+        const res = await fetch(`/api/machine/${machineId}/reset-maintenance`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+            alert('Maintenance completed successfully!');
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        console.error('Error:', err);
+        alert('Failed to complete maintenance');
+    }
+}
+
+async function injectFault() {
+    const faultType = document.getElementById('fault-type').value;
+    if (!confirm(`Inject ${faultType} fault?`)) return;
+    
+    try {
+        const res = await fetch(`/api/machine/${machineId}/inject-fault`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({fault_type: faultType})
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            alert('Fault injected!');
+            loadMachineData();
+        }
+    } catch (err) {
+        alert('Failed to inject fault');
+    }
+}
+
+async function contactVendor() {
+    const reason = prompt('Enter issue description:');
+    if (!reason) return;
+    
+    try {
+        const res = await fetch('/api/vendor/contact', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                machine_id: machineId,
+                fault_summary: reason,
+                urgency: 'scheduled'
+            })
+        });
+        
+        const data = await res.json();
+        if (data.success) {
+            alert(`Vendor ${data.vendor_name} scheduled for ${data.scheduled_date}`);
+            window.location.reload();
+        }
+    } catch (err) {
+        alert('Failed to contact vendor');
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1 @@
+{"MRI": ["Component_Temp", "Gradient_Coil_Temp", "Vibration_Level", "Cooling_System_Performance", "Magnet_Temp_K", "Helium_Level", "Helium_Pressure_psi"], "CT": ["Component_Temp", "Gradient_Coil_Temp", "Vibration_Level", "Cooling_System_Performance", "X_ray_Tube_Temp", "Cooling_Oil_Temp"]}

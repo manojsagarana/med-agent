@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Vendor Directory</h2>
+<div class="row">
+    {% for v in vendors %}
+    <div class="col-md-4 mb-3">
+        <div class="card">
+            <div class="card-body">
+                <h5>{{ v.name }}</h5>
+                <p>{{ v.specialization }}</p>
+                <p>Email: {{ v.contact_email }}</p>
+                <span class="badge bg-success">API Online</span>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

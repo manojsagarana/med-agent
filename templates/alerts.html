@@ -1,0 +1,204 @@
+{% extends "base.html" %}
+{% block title %}Alerts - Predictive Maintenance{% endblock %}
+{% block page_title %}Alert Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <select id="filter-severity" class="form-select">
+                                <option value="">All Severities</option>
+                                <option value="critical">⚫ Critical</option>
+                                <option value="schedule_maintenance">🔴 Schedule Maintenance</option>
+                                <option value="monitor">🟡 Monitor</option>
+                                <option value="normal">🟢 Normal</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select id="filter-resolved" class="form-select">
+                                <option value="">All Status</option>
+                                <option value="false">Unresolved</option>
+                                <option value="true">Resolved</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" onclick="loadAlerts()">
+                                <i class="bi bi-funnel"></i> Apply Filters
+                            </button>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <span class="text-muted">Total: <strong id="alert-total">0</strong> alerts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="alerts-table">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Machine</th>
+                                    <th>Severity</th>
+                                    <th>Description</th>
+                                    <th>Time</th>
+                                    <th>Cost Impact</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alerts-table-body">
+                                <!-- Populated by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Resolve Modal -->
+<div class="modal fade" id="resolveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Resolve Alert</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="resolve-alert-id">
+                <div class="mb-3">
+                    <label class="form-label">Resolution Notes</label>
+                    <textarea id="resolve-notes" class="form-control" rows="3" placeholder="Enter resolution details..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="submitResolve()">
+                    <i class="bi bi-check-circle"></i> Mark as Resolved
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadAlerts();
+});
+
+async function loadAlerts() {
+    const severity = document.getElementById('filter-severity').value;
+    const resolved = document.getElementById('filter-resolved').value;
+    
+    let url = '/api/alerts?limit=100';
+    if (severity) url += `&severity=${severity}`;
+    if (resolved) url += `&resolved=${resolved}`;
+    
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        document.getElementById('alert-total').textContent = data.alerts.length;
+        
+        const tbody = document.getElementById('alerts-table-body');
+        
+        if (data.alerts.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4">No alerts found</td></tr>';
+            return;
+        }
+        
+        tbody.innerHTML = data.alerts.map(alert => {
+            const severityBadge = getSeverityBadge(alert.severity);
+            const statusIcon = alert.is_resolved ? '<i class="bi bi-check-circle-fill text-success"></i>' : 
+                              (alert.is_acknowledged ? '<i class="bi bi-eye-fill text-warning"></i>' : '<i class="bi bi-exclamation-circle-fill text-danger"></i>');
+            const costSavings = alert.estimated_breakdown_cost && alert.estimated_prevention_cost ? 
+                              `$${(alert.estimated_breakdown_cost - alert.estimated_prevention_cost).toLocaleString()}` : '--';
+            
+            return `
+                <tr>
+                    <td>${statusIcon}</td>
+                    <td><strong>${alert.machine_id}</strong><br><small class="text-muted">${alert.machine_type}</small></td>
+                    <td>${severityBadge}</td>
+                    <td>
+                        <strong>${alert.title}</strong><br>
+                        <small class="text-muted">${alert.description.substring(0, 60)}...</small>
+                    </td>
+                    <td><small>${new Date(alert.timestamp).toLocaleString()}</small></td>
+                    <td><span class="text-success">${costSavings}</span></td>
+                    <td>
+                        ${!alert.is_resolved ? `
+                            <button class="btn btn-sm btn-outline-success" onclick="openResolveModal(${alert.id})">
+                                <i class="bi bi-check"></i> Resolve
+                            </button>
+                        ` : '<span class="badge bg-success">Resolved</span>'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Error loading alerts:', err);
+    }
+}
+
+function getSeverityBadge(severity) {
+    const badges = {
+        'critical': '<span class="badge bg-dark">⚫ Critical</span>',
+        'schedule_maintenance': '<span class="badge bg-danger">🔴 Maintenance</span>',
+        'monitor': '<span class="badge bg-warning text-dark">🟡 Monitor</span>',
+        'normal': '<span class="badge bg-success">🟢 Normal</span>'
+    };
+    return badges[severity] || badges['normal'];
+}
+
+function openResolveModal(alertId) {
+    document.getElementById('resolve-alert-id').value = alertId;
+    document.getElementById('resolve-notes').value = '';
+    new bootstrap.Modal(document.getElementById('resolveModal')).show();
+}
+
+async function submitResolve() {
+    const alertId = document.getElementById('resolve-alert-id').value;
+    const notes = document.getElementById('resolve-notes').value;
+    
+    try {
+        const res = await fetch(`/api/alerts/${alertId}/resolve`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes: notes})
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('resolveModal')).hide();
+            showToast('Alert resolved successfully', 'success');
+            loadAlerts();
+        } else {
+            showToast('Error resolving alert', 'danger');
+        }
+    } catch (err) {
+        console.error('Error:', err);
+        showToast('Error resolving alert', 'danger');
+    }
+}
+
+function showToast(message, type) {
+    alert(message);
+}
+</script>
+{% endblock %}

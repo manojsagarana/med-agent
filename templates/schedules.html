@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Schedules - Predictive Maintenance{% endblock %}
+{% block page_title %}Schedules & Maintenance{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Scheduled Maintenance Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-tools"></i> Scheduled Maintenance</h5>
+                </div>
+                <div class="card-body">
+                    {% if maintenance_records %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Machine</th>
+                                    <th>Type</th>
+                                    <th>Scheduled Date</th>
+                                    <th>Vendor</th>
+                                    <th>Status</th>
+                                    <th>Est. Cost</th>
+                                    <th>Patients Affected</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for m in maintenance_records %}
+                                <tr>
+                                    <td>
+                                        {% set mach = machines|selectattr('id', 'equalto', m.machine_id)|first %}
+                                        <strong>{{ mach.machine_id if mach else 'Unknown' }}</strong>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if m.maintenance_type == 'emergency' %}bg-danger{% else %}bg-info{% endif %}">
+                                            {{ m.maintenance_type|upper }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ m.scheduled_date.strftime('%Y-%m-%d %H:%M') if m.scheduled_date else 'TBD' }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if m.vendor %}{{ m.vendor.name }}{% else %}Not assigned{% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if m.status == 'completed' %}bg-success{% elif m.status == 'in_progress' %}bg-primary{% else %}bg-warning text-dark{% endif %}">
+                                            {{ m.status|upper }}
+                                        </span>
+                                    </td>
+                                    <td>${{ m.estimated_cost|default(0)|round(2) }}</td>
+                                    <td>{{ m.patients_rescheduled or 0 }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center mb-0">No scheduled maintenance</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <select id="filter-machine" class="form-select">
+                                <option value="">All Machines</option>
+                                {% for machine in machines %}
+                                <option value="{{ machine.machine_id }}">{{ machine.machine_id }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select id="filter-status" class="form-select">
+                                <option value="">All Status</option>
+                                <option value="scheduled">Scheduled</option>
+                                <option value="rescheduled">Rescheduled</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-primary" onclick="applyFilters()">
+                                <i class="bi bi-funnel"></i> Filter
+                            </button>
+                        </div>
+                        <div class="col-md-3 text-end">
+                            <span class="badge bg-success">Scheduled: {{ appointments|selectattr('status', 'equalto', 'scheduled')|list|length }}</span>
+                            <span class="badge bg-warning text-dark">Rescheduled: {{ appointments|selectattr('status', 'equalto', 'rescheduled')|list|length }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Appointments Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Patient Appointments</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Patient</th>
+                                    <th>Machine</th>
+                                    <th>Scan Type</th>
+                                    <th>Scheduled Time</th>
+                                    <th>Original Time</th>
+                                    <th>Reason</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for apt in appointments %}
+                                <tr class="{% if apt.status == 'rescheduled' %}table-warning{% endif %}">
+                                    <td>
+                                        {% if apt.status == 'scheduled' %}
+                                            <span class="badge bg-success">Scheduled</span>
+                                        {% elif apt.status == 'rescheduled' %}
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-arrow-repeat"></i> Rescheduled</span>
+                                        {% elif apt.status == 'completed' %}
+                                            <span class="badge bg-primary">Completed</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ apt.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong>{{ apt.patient_name }}</strong><br>
+                                        <small class="text-muted">{{ apt.patient_email or '' }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">{{ apt.machine.machine_id if apt.machine else 'N/A' }}</span>
+                                    </td>
+                                    <td>{{ apt.scan_type }}</td>
+                                    <td>
+                                        <strong class="{% if apt.status == 'rescheduled' %}text-success{% endif %}">
+                                            {{ apt.scheduled_datetime.strftime('%Y-%m-%d %H:%M') }}
+                                        </strong>
+                                        {% if apt.status == 'rescheduled' %}
+                                        <br><small class="text-success">✓ New Time</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if apt.original_datetime %}
+                                            <span class="text-decoration-line-through text-danger">
+                                                {{ apt.original_datetime.strftime('%Y-%m-%d %H:%M') }}
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if apt.rescheduled_reason %}
+                                            <small class="text-danger">{{ apt.rescheduled_reason[:40] }}...</small>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if apt.status == 'scheduled' %}
+                                        <button class="btn btn-sm btn-outline-warning" onclick="openReschedule('{{ apt.appointment_id }}', '{{ apt.patient_name }}', '{{ apt.scheduled_datetime.isoformat() }}')">
+                                            Reschedule
+                                        </button>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reschedule Modal -->
+<div class="modal fade" id="rescheduleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reschedule Appointment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="reschedule-id">
+                <div class="mb-3">
+                    <label class="form-label">Patient</label>
+                    <input type="text" class="form-control" id="reschedule-patient" readonly>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">New Date & Time</label>
+                    <input type="datetime-local" class="form-control" id="reschedule-datetime" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Reason</label>
+                    <textarea class="form-control" id="reschedule-reason" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="submitReschedule()">Reschedule</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function applyFilters() {
+    const machine = document.getElementById('filter-machine').value;
+    const status = document.getElementById('filter-status').value;
+    
+    let url = '/schedules?';
+    if (machine) url += `machine=${machine}&`;
+    if (status) url += `status=${status}&`;
+    
+    window.location.href = url;
+}
+
+function openReschedule(aptId, patientName, currentTime) {
+    document.getElementById('reschedule-id').value = aptId;
+    document.getElementById('reschedule-patient').value = patientName;
+    
+    const tomorrow = new Date(currentTime);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('reschedule-datetime').value = tomorrow.toISOString().slice(0, 16);
+    
+    new bootstrap.Modal(document.getElementById('rescheduleModal')).show();
+}
+
+async function submitReschedule() {
+    const aptId = document.getElementById('reschedule-id').value;
+    const newTime = document.getElementById('reschedule-datetime').value;
+    const reason = document.getElementById('reschedule-reason').value || 'Manual reschedule';
+    
+    try {
+        const res = await fetch('/api/schedules/reschedule', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                appointment_id: aptId,
+                new_datetime: newTime,
+                reason: reason
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('rescheduleModal')).hide();
+            alert('Appointment rescheduled!');
+            window.location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    } catch (err) {
+        alert('Failed to reschedule');
+    }
+}
+</script>
+{% endblock %}

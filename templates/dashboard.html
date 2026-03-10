@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Predictive Maintenance{% endblock %}
+{% block page_title %}Operations Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- KPI Row -->
+    <div class="row mb-4" id="kpi-row">
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-primary"><i class="bi bi-hdd-stack"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-machines">5</div>
+                    <div class="kpi-label">Total Machines</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-success"><i class="bi bi-arrow-up-circle"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-uptime">98.5%</div>
+                    <div class="kpi-label">Avg Uptime</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-warning"><i class="bi bi-exclamation-triangle"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-alerts">0</div>
+                    <div class="kpi-label">Pending Alerts</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-danger"><i class="bi bi-x-octagon"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-critical">0</div>
+                    <div class="kpi-label">Critical</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-info"><i class="bi bi-lightning"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-energy">0 kWh</div>
+                    <div class="kpi-label">Energy Saved</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="kpi-card">
+                <div class="kpi-icon bg-success"><i class="bi bi-currency-dollar"></i></div>
+                <div class="kpi-content">
+                    <div class="kpi-value" id="kpi-savings">$0</div>
+                    <div class="kpi-label">Cost Saved</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Machines Grid -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Equipment Status</h5>
+                {% if user.role == 'admin' %}
+                <button class="btn btn-sm btn-outline-primary" onclick="analyzeAllMachines()">
+                    <i class="bi bi-arrow-repeat"></i> Analyze All
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="row" id="machines-grid">
+        <!-- Populated by JavaScript -->
+        <div class="col-12 text-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2">Loading machines...</p>
+        </div>
+    </div>
+
+    <!-- Charts and Alerts Row -->
+    <div class="row mt-4">
+        <!-- Live Telemetry Chart -->
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Live Telemetry</h6>
+                    <select id="chart-machine-select" class="form-select form-select-sm w-auto">
+                        <option value="mri_brain_01">MRI Brain 01</option>
+                        <option value="mri_spine_01">MRI Spine 01</option>
+                        <option value="mri_msk_01">MRI MSK 01</option>
+                        <option value="ct_chest_01">CT Chest 01</option>
+                        <option value="ct_abdo_01">CT Abdo 01</option>
+                    </select>
+                </div>
+                <div class="card-body">
+                    <canvas id="telemetryChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Alerts -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">Recent Alerts</h6>
+                    <a href="{{ url_for('alerts') }}" class="btn btn-sm btn-link">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div id="alert-feed" class="alert-feed">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Machine Detail Modal -->
+<div class="modal fade" id="machineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="machineModalTitle">Machine Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="machineModalBody">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="btnRunDiagnostics">Run Diagnostics</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Initialize dashboard on load
+    document.addEventListener('DOMContentLoaded', function() {
+        initDashboard();
+    });
+</script>
+{% endblock %}

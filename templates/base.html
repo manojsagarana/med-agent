@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Predictive Maintenance Agent{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</head>
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <i class="bi bi-heart-pulse-fill"></i>
+            <span>MED-AGENT</span>
+        </div>
+        
+        <div class="sidebar-user">
+            <div class="user-avatar">{{ user.username[0]|upper }}</div>
+            <div class="user-info">
+                <div class="user-name">{{ user.full_name or user.username }}</div>
+                <div class="user-role badge {% if user.role == 'admin' %}bg-danger{% elif user.role == 'engineer' %}bg-primary{% else %}bg-secondary{% endif %}">
+                    {{ user.role|upper }}
+                </div>
+            </div>
+        </div>
+        
+        <ul class="nav flex-column">
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'dashboard' %}active{% endif %}" href="{{ url_for('dashboard') }}">
+                    <i class="bi bi-speedometer2"></i>
+                    <span>Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'alerts' %}active{% endif %}" href="{{ url_for('alerts') }}">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Alerts</span>
+                    <span class="badge bg-danger ms-auto" id="alert-count">0</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'schedules' %}active{% endif %}" href="{{ url_for('schedules') }}">
+                    <i class="bi bi-calendar-check"></i>
+                    <span>Schedules</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'vendors' %}active{% endif %}" href="{{ url_for('vendors') }}">
+                    <i class="bi bi-building"></i>
+                    <span>Vendors</span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'reports' %}active{% endif %}" href="{{ url_for('reports') }}">
+                    <i class="bi bi-file-earmark-bar-graph"></i>
+                    <span>Reports</span>
+                </a>
+            </li>
+            {% if user.role == 'admin' %}
+            <li class="nav-item">
+                <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
+                    <i class="bi bi-gear"></i>
+                    <span>Settings</span>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+        
+        <div class="sidebar-footer">
+            <a href="{{ url_for('logout') }}" class="btn btn-outline-light btn-sm w-100">
+                <i class="bi bi-box-arrow-left"></i> Logout
+            </a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="d-flex align-items-center">
+                <h4 class="mb-0">{% block page_title %}Dashboard{% endblock %}</h4>
+            </div>
+            <div class="d-flex align-items-center gap-3">
+                <div class="connection-status">
+                    <span id="connection-indicator" class="status-dot bg-success"></span>
+                    <span id="connection-text">Connected</span>
+                </div>
+                <div class="text-muted small">
+                    Last Updated: <span id="last-updated">--</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Analysis Progress Banner -->
+        <div id="analysis-banner" class="alert alert-info d-none">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                <span id="analysis-message">Analysis in progress...</span>
+            </div>
+        </div>
+        
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

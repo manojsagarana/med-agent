@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Settings - Admin{% endblock %}
+{% block page_title %}System Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">System Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form id="settings-form">
+                        <div class="mb-3">
+                            <label class="form-label">Analysis Interval (minutes)</label>
+                            <input type="number" class="form-control" value="5" min="1" max="60">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Telemetry Update Interval (seconds)</label>
+                            <input type="number" class="form-control" value="5" min="1" max="30">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="email-notifications">
+                                <label class="form-check-label" for="email-notifications">Enable Email Notifications</label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">User Management</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Last Login</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>admin</td>
+                                <td><span class="badge bg-danger">Admin</span></td>
+                                <td>Just now</td>
+                            </tr>
+                            <tr>
+                                <td>engineer</td>
+                                <td><span class="badge bg-primary">Engineer</span></td>
+                                <td>--</td>
+                            </tr>
+                            <tr>
+                                <td>radiologist</td>
+                                <td><span class="badge bg-secondary">Radiologist</span></td>
+                                <td>--</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">System Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" onclick="retrainModels()">
+                            <i class="bi bi-arrow-repeat"></i> Retrain ML Models
+                        </button>
+                        <button class="btn btn-outline-warning" onclick="clearAlerts()">
+                            <i class="bi bi-trash"></i> Clear All Alerts
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="resetAllMachines()">
+                            <i class="bi bi-arrow-counterclockwise"></i> Reset All Machines
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+async function retrainModels() {
+    if (!confirm('Retrain ML models now?')) return;
+    try {
+        const res = await fetch('/api/admin/models/retrain', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('Model retraining started/completed.');
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Failed to retrain models');
+    }
+}
+
+async function clearAlerts() {
+    if (!confirm('Clear all alerts and maintenance records? This cannot be undone.')) return;
+    try {
+        const res = await fetch('/api/admin/alerts/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('All alerts cleared.');
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Failed to clear alerts');
+    }
+}
+
+async function resetAllMachines() {
+    if (!confirm('Reset all machines to normal state?')) return;
+    try {
+        const res = await fetch('/api/admin/machines/reset-all', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+            alert('All machines reset.');
+            window.location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Failed to reset machines');
+    }
+}
+</script>
+{% endblock %}

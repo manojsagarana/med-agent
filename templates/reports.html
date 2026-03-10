@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% block title %}Reports - Predictive Maintenance{% endblock %}
+{% block page_title %}Cost Impact Reports{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Report Type Selection -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card report-card" onclick="generateReport('summary')">
+                <div class="card-body text-center">
+                    <i class="bi bi-file-earmark-text display-4 text-primary"></i>
+                    <h5 class="mt-3">Summary Report</h5>
+                    <p class="text-muted">Overview of all equipment health</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card report-card" onclick="generateReport('cost_analysis')">
+                <div class="card-body text-center">
+                    <i class="bi bi-currency-dollar display-4 text-success"></i>
+                    <h5 class="mt-3">Cost Analysis</h5>
+                    <p class="text-muted">Prevention vs breakdown costs</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card report-card" onclick="generateReport('energy_savings')">
+                <div class="card-body text-center">
+                    <i class="bi bi-lightning display-4 text-warning"></i>
+                    <h5 class="mt-3">Energy Savings</h5>
+                    <p class="text-muted">Eco mode energy reduction</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Display Area -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0" id="report-title">Select a Report</h5>
+                    <div>
+                        <button class="btn btn-sm btn-outline-primary" onclick="exportReport('summary')" id="btn-export">
+                            <i class="bi bi-download"></i> Export
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body" id="report-content">
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-file-earmark-bar-graph display-1"></i>
+                        <p class="mt-3">Click on a report type above to generate</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Impact by Machine -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Cost Impact by Machine</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Machine</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Prevention Cost</th>
+                                    <th>Potential Breakdown</th>
+                                    <th>Savings</th>
+                                    <th>ROI</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cost-table-body">
+                                {% for machine in machines %}
+                                <tr>
+                                    <td><strong>{{ machine.machine_id }}</strong></td>
+                                    <td>{{ machine.machine_type }}</td>
+                                    <td>
+                                        <span class="badge {% if machine.status == 'normal' %}bg-success{% elif machine.status == 'monitor' %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ machine.status or 'normal' }}
+                                        </span>
+                                    </td>
+                                    <td class="cost-prevention">Loading...</td>
+                                    <td class="cost-breakdown">Loading...</td>
+                                    <td class="cost-savings text-success">Loading...</td>
+                                    <td class="cost-roi">Loading...</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadCostAnalysis();
+});
+
+async function loadCostAnalysis() {
+    const machines = ['mri_brain_01', 'mri_spine_01', 'mri_msk_01', 'ct_chest_01', 'ct_abdo_01'];
+    
+    for (const machineId of machines) {
+        try {
+            const res = await fetch(`/api/cost-analysis/${machineId}`);
+            const data = await res.json();
+            
+            const rows = document.querySelectorAll('#cost-table-body tr');
+            rows.forEach(row => {
+                if (row.querySelector('td strong').textContent === machineId) {
+                    row.querySelector('.cost-prevention').textContent = `$${data.prevention_cost.toLocaleString()}`;
+                    row.querySelector('.cost-breakdown').textContent = `$${data.breakdown_cost.toLocaleString()}`;
+                    row.querySelector('.cost-savings').textContent = `$${data.potential_savings.toLocaleString()}`;
+                    row.querySelector('.cost-roi').textContent = `${data.roi_percentage}%`;
+                }
+            });
+        } catch (err) {
+            console.error(`Error loading cost for ${machineId}:`, err);
+        }
+    }
+}
+
+async function generateReport(type) {
+    document.getElementById('report-title').textContent = 'Generating Report...';
+    document.getElementById('report-content').innerHTML = '<div class="text-center py-4"><div class="spinner-border"></div></div>';
+    
+    try {
+        const res = await fetch('/api/reports/generate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({type: type})
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            document.getElementById('report-title').textContent = type.replace('_', ' ').toUpperCase() + ' Report';
+            document.getElementById('report-content').innerHTML = formatReport(type, data.report);
+        }
+    } catch (err) {
+        document.getElementById('report-content').innerHTML = '<div class="alert alert-danger">Error generating report</div>';
+    }
+}
+
+function formatReport(type, report) {
+    if (type === 'cost_analysis') {
+        return `
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h3 class="text-primary">$${report.total_prevention_cost?.toLocaleString() || 0}</h3>
+                            <p class="mb-0">Total Prevention Cost</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-light">
+                        <div class="card-body text-center">
+                            <h3 class="text-danger">$${report.total_breakdown_cost?.toLocaleString() || 0}</h3>
+                            <p class="mb-0">Potential Breakdown Cost</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h3>$${report.total_potential_savings?.toLocaleString() || 0}</h3>
+                            <p class="mb-0">Potential Savings</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } else if (type === 'summary') {
+        return `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>KPIs</h6>
+                    <ul class="list-group">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Total Machines</span>
+                            <strong>${report.kpis?.total_machines || 5}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Average Uptime</span>
+                            <strong>${report.kpis?.avg_uptime || 98}%</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Pending Alerts</span>
+                            <strong>${report.kpis?.pending_alerts || 0}</strong>
+                        </li>
+                    </ul>
+                </div>
+                <div class="col-md-6">
+                    <h6>Alerts Summary</h6>
+                    <ul class="list-group">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Total Alerts</span>
+                            <strong>${report.alerts_summary?.total || 0}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Unresolved</span>
+                            <strong class="text-warning">${report.alerts_summary?.unresolved || 0}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Critical</span>
+                            <strong class="text-danger">${report.alerts_summary?.critical || 0}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        `;
+    } else {
+        return `<pre>${JSON.stringify(report, null, 2)}</pre>`;
+    }
+}
+
+function exportReport(type) {
+    window.location.href = `/api/reports/export/${type}`;
+}
+</script>
+{% endblock %}
