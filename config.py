@@ -13,9 +13,9 @@ class Config:
     MAIL_SERVER = 'smtp.gmail.com'
     MAIL_PORT = 587
     MAIL_USE_TLS = True
-    MAIL_USERNAME = 'giridhareshwaran2005@gmail.com'
-    MAIL_PASSWORD = 'aejr rflw kzjo brcd'
-    MAIL_DEFAULT_SENDER = 'giridhareshwaran2005@gmail.com'
+    MAIL_USERNAME = ''
+    MAIL_PASSWORD = ''
+    MAIL_DEFAULT_SENDER = ''
     
     # SMS via SMTP (email-to-SMS gateway)
     # Example domains (carrier-specific): txt.att.net, vtext.com, tmomail.net, etc.
