@@ -120,3 +120,4 @@ Optional environment variable:
 
 ```bash
 python app.py
+```

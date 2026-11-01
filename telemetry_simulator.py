@@ -24,7 +24,7 @@ class TelemetrySimulator:
         # Normal operating ranges (baseline - healthy values)
         self.normal_ranges = {
             'MRI': {
-                'Component_Temp': (32, 38),
+                'Component_Temp': (45, 90),
                 'Gradient_Coil_Temp': (38, 48),
                 'Vibration_Level': (0.8, 1.5),
                 'Cooling_System_Performance': (95, 100),
